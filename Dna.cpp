@@ -23,8 +23,10 @@ void Dna::save(gzFile backup_file) {
     // Create a stringstream for conversion
     std::stringstream bitset_stream;
 
-    // Write the bitset to the stringstream
-    bitset_stream << seq_;
+    // Manually convert the bitset to a string
+    for (size_t i = 0; i < seq_.size(); ++i) {
+        bitset_stream << seq_[i];
+    }
 
     // Get the string from the stringstream
     std::string bitset_string = bitset_stream.str();
@@ -37,17 +39,22 @@ void Dna::save(gzFile backup_file) {
     gzwrite(backup_file, bitset_string.data(), dna_length * sizeof(char));
 }
 
-
 void Dna::load(gzFile backup_file) {
     int dna_length;
     gzread(backup_file, &dna_length, sizeof(dna_length));
 
+    // Create a string to store the bitset data
     std::string bitset_string(dna_length, '0');
     gzread(backup_file, &bitset_string[0], dna_length * sizeof(char));
 
-    seq_ = boost::dynamic_bitset<>(bitset_string);  // Construct bitset from string
-}
+    // Clear the current bitset
+    seq_.clear();
 
+    // Convert string back to bitset
+    for (char c : bitset_string) {
+        seq_.push_back(c == '1');
+    }
+}
 
 void Dna::set(int pos, char c) {
     assert(pos >= 0 && pos < seq_.size());

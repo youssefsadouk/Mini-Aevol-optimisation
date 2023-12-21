@@ -47,12 +47,21 @@ cuExpManager::cuExpManager(const ExpManager* cpu_exp) {
 
     genome_length_ = cpu_exp->internal_organisms_[0]->length();
     host_individuals_ = new char *[nb_indivs_];
+    auto bitset_to_char_array = [](const boost::dynamic_bitset<>& bitset) -> std::vector<char> {
+        std::vector<char> char_array((bitset.size() + 7) / 8, 0);
+        for (size_t i = 0; i < bitset.size(); ++i) {
+            if (bitset[i]) {
+                char_array[i / 8] |= (1 << (i % 8));
+            }
+        }
+        return char_array;
+    };
     for (int i = 0; i < nb_indivs_; ++i) {
-        host_individuals_[i] = new char[genome_length_];
         const auto& org = cpu_exp->internal_organisms_[i];
-        memcpy(host_individuals_[i], org->dna_->seq_.data(), genome_length_ * sizeof(char));
+        std::vector<char> char_array = bitset_to_char_array(org->dna_->seq_);
+        host_individuals_[i] = new char[char_array.size()];
+        std::memcpy(host_individuals_[i], char_array.data(), char_array.size() * sizeof(char));
     }
-
     target_ = new double[FUZZY_SAMPLING];
     memcpy(target_, cpu_exp->target, FUZZY_SAMPLING * sizeof(double));
 

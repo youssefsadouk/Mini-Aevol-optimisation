@@ -4,14 +4,12 @@
 
 #pragma once
 
-#include <vector>
+#include <boost/dynamic_bitset.hpp>
 #include <zlib.h>
-
 #include "Threefry.h"
 #include "aevol_constants.h"
 
 class Dna {
-
 public:
     Dna() = default;
 
@@ -29,18 +27,19 @@ public:
 
     void set(int pos, char c);
 
-    /// Remove the DNA inbetween pos_1 and pos_2
+    // Remove the DNA inbetween pos_1 and pos_2
     void remove(int pos_1, int pos_2);
 
-    /// Insert a sequence of a given length at a given position into the DNA of the Organism
+    // Insert a sequence of a given length at a given position into the DNA of the Organism
     void insert(int pos, std::vector<char> seq);
 
-    /// Insert a sequence of a given length at a given position into the DNA of the Organism
+    // Insert a sequence of a given length at a given position into the DNA of the Organism
     void insert(int pos, Dna *seq);
 
     void do_switch(int pos);
 
     void do_duplication(int pos_1, int pos_2, int pos_3);
+
 
     int promoter_at(int pos);
 
@@ -52,5 +51,5 @@ public:
 
     int codon_at(int pos);
 
-    std::vector<char> seq_;
+    boost::dynamic_bitset<> seq_;
 };
