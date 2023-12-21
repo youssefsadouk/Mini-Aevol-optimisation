@@ -659,15 +659,7 @@ void Organism::add_new_promoter(int32_t position, int8_t error) {
 }
 
 void Organism::look_for_new_promoters_starting_between(int32_t pos_1, int32_t pos_2) {
-    // When pos_1 > pos_2, we will perform the search in 2 steps.
-    // As positions  0 and dna_->length() are equivalent, it's preferable to
-    // keep 0 for pos_1 and dna_->length() for pos_2.
-
-    if (pos_1 >= pos_2) {
-        look_for_new_promoters_starting_after(pos_1);
-        look_for_new_promoters_starting_before(pos_2);
-        return;
-    }
+	// Removed a logic for Circular Dna
     // Hamming distance of the sequence from the promoter consensus
 
     for (int32_t i = pos_1; i < pos_2; i++) {
@@ -679,28 +671,8 @@ void Organism::look_for_new_promoters_starting_between(int32_t pos_1, int32_t po
     }
 }
 
-void Organism::look_for_new_promoters_starting_after(int32_t pos) {
-    for (int32_t i = pos; i < dna_->length(); i++) {
-        int dist = dna_->promoter_at(i);
-
-        if (dist <= 4) { // dist takes the hamming distance of the sequence from the consensus
-            add_new_promoter(i, dist);
-        }
-    }
-}
-
-void Organism::look_for_new_promoters_starting_before(int32_t pos) {
-    // Hamming distance of the sequence from the promoter consensus
-
-    for (int32_t i = 0; i < pos; i++) {
-
-        int dist = dna_->promoter_at(i);
-
-        if (dist <= 4) { // dist takes the hamming distance of the sequence from the consensus
-            add_new_promoter(i, dist);
-        }
-    }
-}
+// removing look_for_new_promoters_starting_after(int32_t pos)
+// and look_for_new_promoters_starting_before(int32_t pos) as they are for Circular Dna. 
 
 // Printings
 
