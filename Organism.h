@@ -45,7 +45,10 @@
 class Organism {
 
 public:
-    Organism(int length, Threefry::Gen &&rng);
+
+	Organism(int length, Threefry::Gen &&rng);
+	
+    Organism(int length, Threefry::Gen &&rng, int organism_index, int total_organisms);
 
     explicit Organism(const std::shared_ptr<Organism> &clone);
 
@@ -71,6 +74,11 @@ public:
 
     // Printings
     void print_info();
+
+    // New functions to handle DNA segments in the larger structure
+    void set_dna_segment_info(unsigned int segment_start, unsigned int segment_length);
+    unsigned int get_dna_segment_start() const;
+    unsigned int get_dna_segment_length() const;
 
     using ErrorType = int8_t;
     // Map position (int) to Promoter
@@ -101,6 +109,10 @@ public:
 
     int nb_swi_ = 0;
     int nb_mut_ = 0;
+
+    // New member variables for DNA segment information
+    unsigned int dna_segment_start_;  // Position of this organism's DNA segment in the larger DNA structure
+    unsigned int dna_segment_length_; // Length of this organism's DNA segment within the larger DNA structure
 
 private:
     // Evaluation

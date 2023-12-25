@@ -31,15 +31,43 @@
 
 using namespace std;
 
+// a global shared segment for all organisms
+DnaSharedSegment* global_shared_segment = nullptr;
+
 /**
  * Constructor to generate a random organism (i.e. an organism with a random DNA)
  *
  * @param length : Length of the generated random DNA
  */
+
 Organism::Organism(int length, Threefry::Gen &&rng) {
     rna_count_ = 0;
 
     dna_ = new Dna(length, std::move(rng));
+}
+
+Organism::Organism(int length, Threefry::Gen &&rng, int organism_index, int total_organisms) {
+    rna_count_ = 0;
+
+    // Initialize the global shared segment if not already done
+    if (global_shared_segment == nullptr) {
+        int total_dna_length = length * total_organisms; // Total length accommodating all organisms
+        global_shared_segment = new DnaSharedSegment(total_dna_length, std::move(rng));
+    }
+
+    // Calculate start and end positions for this organism
+    int segment_length = length; // Each organism's DNA segment length
+    int start_position = organism_index * segment_length;
+    int end_position = start_position + segment_length;
+
+    // Ensure the end position doesn't exceed the total DNA length
+    end_position = std::min(end_position, global_shared_segment->full_length());
+
+    // Create a new Dna object
+    dna_ = new Dna(length, std::move(rng));
+    
+    // Associate DNA with the global shared segment
+    dna_->set_shared_segment(global_shared_segment, start_position, end_position);
 }
 
 /**
@@ -49,8 +77,21 @@ Organism::Organism(int length, Threefry::Gen &&rng) {
  */
 Organism::Organism(const std::shared_ptr<Organism> &clone) {
     rna_count_ = 0;
+
+    // Deep copy the DNA of the clone
     dna_ = new Dna(*(clone->dna_));
     promoters_ = clone->promoters_;
+
+    // If the original DNA was part of a shared segment, associate the cloned DNA with the same segment
+    if (clone->dna_->is_part_of_shared_segment()) {
+        // Retrieve the shared segment and the segment positions from the original DNA
+        DnaSharedSegment* shared_segment = clone->dna_->get_shared_segment();
+        int segment_start = clone->dna_->get_segment_start();
+        int segment_end = clone->dna_->get_segment_end();
+
+        // Associate the cloned DNA with the same shared segment
+        dna_->set_shared_segment(shared_segment, segment_start, segment_end);
+    }
 }
 
 /**
@@ -100,6 +141,20 @@ void Organism::save(gzFile backup_file) const {
 void Organism::load(gzFile backup_file) {
     dna_ = new Dna();
     dna_->load(backup_file);
+}
+
+// Implementation of new member functions for large DNA Structure
+void Organism::set_dna_segment_info(unsigned int segment_start, unsigned int segment_length) {
+    dna_segment_start_ = segment_start;
+    dna_segment_length_ = segment_length;
+}
+
+unsigned int Organism::get_dna_segment_start() const {
+    return dna_segment_start_;
+}
+
+unsigned int Organism::get_dna_segment_length() const {
+    return dna_segment_length_;
 }
 
 /**

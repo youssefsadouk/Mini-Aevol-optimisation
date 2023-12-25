@@ -585,3 +585,4 @@ void init_device_population(int nb_indivs, int genome_length, cuIndividual* all_
     }
 }
 
+

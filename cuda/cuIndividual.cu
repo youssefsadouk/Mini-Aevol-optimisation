@@ -429,3 +429,4 @@ __device__ void cuIndividual::print_phenotype() const {
     }
     __syncthreads();
 }
+

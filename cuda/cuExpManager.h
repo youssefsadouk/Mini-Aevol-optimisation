@@ -35,7 +35,7 @@ private:
     int nb_indivs_;
 
     int genome_length_;
-    char** host_individuals_;
+    char** host_individuals_;  // Consider replacing with a single large DNA structure
 
     key_value_type seed_;
     size_t nb_counter_;
@@ -52,14 +52,18 @@ private:
 
     // Device data
     cuIndividual* device_individuals_;
-    char* all_child_genome_;
-    char* all_parent_genome_;
+    char* all_child_genome_;  // Consider using segments of a larger DNA structure
+    char* all_parent_genome_;  // Consider using segments of a larger DNA structure
 
     int* reproducers_;
 
     double* device_target_;
 
     RandService* rand_service_;
+
+    // DNA Segment Information
+    uint dna_segment_start_;  // Start position of the segment in the large DNA structure
+    uint dna_segment_length_;  // Length of the segment in the large DNA structure
 };
 
 
