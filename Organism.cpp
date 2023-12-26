@@ -28,6 +28,7 @@
 
 #include <cmath>
 #include "Organism.h"
+#include <omp.h>
 
 using namespace std;
 
@@ -173,6 +174,7 @@ void Organism::compute_protein_stats() {
     nb_coding_RNAs = 0;
     nb_non_coding_RNAs = 0;
 
+    #pragma omp parallel for reduction(+:nb_coding_RNAs, nb_non_coding_RNAs)
     for (int i = 0; i < rna_count_; i++) {
         if (rnas[i] != nullptr) {
             if (rnas[i]->is_coding_)
@@ -182,18 +184,18 @@ void Organism::compute_protein_stats() {
         }
     }
 
+    #pragma omp parallel for reduction(+:nb_func_genes, nb_non_func_genes, nb_genes_activ, nb_genes_inhib)
     for (int i = 0; i < protein_count_; i++) {
-        if (rnas[i] != nullptr) {
-            if (proteins[i]->is_functional) {
+        if (proteins[i] != nullptr) {
+            if (proteins[i]->is_functional)
                 nb_func_genes++;
-            } else {
+            else
                 nb_non_func_genes++;
-            }
-            if (proteins[i]->h > 0) {
+
+            if (proteins[i]->h > 0)
                 nb_genes_activ++;
-            } else {
+            else
                 nb_genes_inhib++;
-            }
         }
     }
 }
@@ -286,6 +288,7 @@ void Organism::compute_RNA() {
 }
 
 void Organism::search_start_protein() {
+    #pragma omp parallel for
     for (int rna_idx = 0; rna_idx < rna_count_; rna_idx++) {
         const auto &rna = rnas[rna_idx];
         int c_pos = rna->begin;
@@ -296,6 +299,8 @@ void Organism::search_start_protein() {
 
             while (c_pos != rna->end) {
                 if (dna_->shine_dal_start(c_pos)) {
+                    // Critical section to ensure thread safety when modifying the vector
+                    #pragma omp critical
                     rna->start_prot.push_back(c_pos);
                 }
 
@@ -315,6 +320,7 @@ void Organism::compute_protein() {
 
     proteins.resize(resize_to);
 
+	#pragma omp parallel for
     for (int rna_idx = 0; rna_idx < rna_count_; rna_idx++) {
         auto* rna = rnas[rna_idx];
         int transcribed_start = rna->begin + PROM_SIZE;
@@ -370,6 +376,7 @@ void Organism::compute_protein() {
 }
 
 void Organism::translate_protein() {
+	#pragma omp parallel for
     for (int protein_idx = 0; protein_idx < protein_count_; protein_idx++) {
         auto* protein = proteins[protein_idx];
         if (protein->is_init_) {
@@ -546,12 +553,15 @@ void Organism::translate_protein() {
 
     for (int protein_idx = 0; protein_idx < protein_count_; protein_idx++) {
         auto* protein = proteins[protein_idx];
-        if (protein->is_init_) {
-            if (lookup.find(protein->protein_start) == lookup.end()) {
-                lookup[protein->protein_start] = protein;
-            } else {
-                lookup[protein->protein_start]->e += protein->e;
-                protein->is_init_ = false;
+        #pragma omp critical
+        {
+            if (protein->is_init_) {
+                if (lookup.find(protein->protein_start) == lookup.end()) {
+                    lookup[protein->protein_start] = protein;
+                } else {
+                    lookup[protein->protein_start]->e += protein->e;
+                    protein->is_init_ = false;
+                }
             }
         }
     }
@@ -561,6 +571,7 @@ void Organism::compute_phenotype() {
     double activ_phenotype[FUZZY_SAMPLING]{};
     double inhib_phenotype[FUZZY_SAMPLING]{};
 
+	#pragma omp parallel for
     for (int protein_idx = 0; protein_idx < protein_count_; protein_idx++) {
         const auto* protein = proteins[protein_idx];
         if (protein->is_init_ && protein->is_functional) {
@@ -602,14 +613,14 @@ void Organism::compute_phenotype() {
         }
     }
 
-
+	#pragma omp parallel for
     for (int fuzzy_idx = 0; fuzzy_idx < FUZZY_SAMPLING; fuzzy_idx++) {
         if (activ_phenotype[fuzzy_idx] > 1)
             activ_phenotype[fuzzy_idx] = 1;
         if (inhib_phenotype[fuzzy_idx] < -1)
             inhib_phenotype[fuzzy_idx] = -1;
     }
-
+	#pragma omp parallel for
     for (int fuzzy_idx = 0; fuzzy_idx < FUZZY_SAMPLING; fuzzy_idx++) {
         phenotype[fuzzy_idx] = activ_phenotype[fuzzy_idx] + inhib_phenotype[fuzzy_idx];
         if (phenotype[fuzzy_idx] < 0)
@@ -621,13 +632,16 @@ void Organism::compute_phenotype() {
 
 void Organism::compute_fitness(const double *target) {
     metaerror = 0.0;
+    double local_metaerror = 0.0;
 
+    #pragma omp parallel for reduction(+:local_metaerror)
     for (int fuzzy_idx = 0; fuzzy_idx < FUZZY_SAMPLING; fuzzy_idx++) {
         delta[fuzzy_idx] = fabs(phenotype[fuzzy_idx] - target[fuzzy_idx]);
         delta[fuzzy_idx] /= (double) FUZZY_SAMPLING;
-        metaerror += delta[fuzzy_idx];
+        local_metaerror += delta[fuzzy_idx];
     }
 
+    metaerror = local_metaerror;
     fitness = exp(-SELECTION_PRESSURE * ((double) metaerror));
 }
 

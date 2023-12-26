@@ -1,0 +1,7 @@
+#pragma once
+
+#include <boost/dynamic_bitset.hpp>
+#include <zlib.h>
+#include "Threefry.h"
+#include "aevol_constants.h"
+#include <mutex>
