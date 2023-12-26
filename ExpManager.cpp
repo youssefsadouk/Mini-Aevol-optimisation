@@ -28,7 +28,6 @@
 
 #include <iostream>
 #include <zlib.h>
-#include <omp.h>
 
 using namespace std;
 
@@ -76,7 +75,6 @@ ExpManager::ExpManager(int grid_height, int grid_width, int seed, double mutatio
 
     target = new double[FUZZY_SAMPLING];
     double geometric_area = 0.0;
-    #pragma omp parallel for
     for (int i = 0; i < FUZZY_SAMPLING; i++) {
         double pt_i = ((double) i) / (double) FUZZY_SAMPLING;
 
@@ -99,7 +97,6 @@ ExpManager::ExpManager(int grid_height, int grid_width, int seed, double mutatio
 
 
     // Initializing the PRNGs
-    #pragma omp parallel for
     for (int indiv_id = 0; indiv_id < nb_indivs_; ++indiv_id) {
         dna_mutator_array_[indiv_id] = nullptr;
     }
@@ -141,7 +138,6 @@ ExpManager::ExpManager(int time) {
     load(time);
 
     double geometric_area = 0;
-    #pragma omp parallel for reduction(+:geometric_area)
     for (int i = 0; i < FUZZY_SAMPLING - 1; i++) {
         // Computing a trapezoid area
         geometric_area += ((fabs(target[i]) + fabs(target[i + 1])) / (2 * (double) FUZZY_SAMPLING));
@@ -311,18 +307,18 @@ void ExpManager::selection(int indiv_id) const {
 
     int cur_x, cur_y;
 
-    #pragma omp parallel for reduction(+:sum_local_fit) private(cur_x, cur_y) collapse(2)
     for (int8_t i = -1; i < NEIGHBORHOOD_WIDTH - 1; i++) {
         for (int8_t j = -1; j < NEIGHBORHOOD_HEIGHT - 1; j++) {
             cur_x = (x + i + grid_width_) % grid_width_;
             cur_y = (y + j + grid_height_) % grid_height_;
 
-            local_fit_array[omp_get_thread_num()] = prev_internal_organisms_[cur_x * grid_width_ + cur_y]->fitness;
-            sum_local_fit += local_fit_array[omp_get_thread_num()];
+            local_fit_array[count] = prev_internal_organisms_[cur_x * grid_width_ + cur_y]->fitness;
+            sum_local_fit += local_fit_array[count];
+
+            count++;
         }
     }
 
-    #pragma omp parallel for
     for (int8_t i = 0; i < NEIGHBORHOOD_SIZE; i++) {
         probs[i] = local_fit_array[i] / sum_local_fit;
     }
@@ -336,7 +332,6 @@ void ExpManager::selection(int indiv_id) const {
     next_generation_reproducer_[indiv_id] = ((x + x_offset + grid_width_) % grid_width_) * grid_height_ +
                                             ((y + y_offset + grid_height_) % grid_height_);
 }
-
 
 /**
  * Prepare the mutation generation of an organism
@@ -367,8 +362,8 @@ void ExpManager::prepare_mutation(int indiv_id) const {
  *
  */
 void ExpManager::run_a_step() {
-    // Parallelizing the organism processing
-    #pragma omp parallel for
+
+    // Running the simulation process for each organism
     for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
         selection(indiv_id);
         prepare_mutation(indiv_id);
@@ -381,43 +376,35 @@ void ExpManager::run_a_step() {
     }
 
     // Swap Population
-    #pragma omp parallel for
     for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
         prev_internal_organisms_[indiv_id] = internal_organisms_[indiv_id];
         internal_organisms_[indiv_id] = nullptr;
     }
 
-    // Computing stats in parallel
-    #pragma omp parallel sections
-    {
-        #pragma omp section
-        {
-            // Search for the best
-            double best_fitness = prev_internal_organisms_[0]->fitness;
-            int idx_best = 0;
-            for (int indiv_id = 1; indiv_id < nb_indivs_; indiv_id++) {
-                if (prev_internal_organisms_[indiv_id]->fitness > best_fitness) {
-                    idx_best = indiv_id;
-                    best_fitness = prev_internal_organisms_[indiv_id]->fitness;
-                }
-            }
-            best_indiv = prev_internal_organisms_[idx_best];
-        }
-
-        #pragma omp section
-        {
-            // Compute protein stats for mutated organisms
-            for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
-                if (dna_mutator_array_[indiv_id]->hasMutate())
-                    prev_internal_organisms_[indiv_id]->compute_protein_stats();
-            }
+    // Search for the best
+    double best_fitness = prev_internal_organisms_[0]->fitness;
+    int idx_best = 0;
+    for (int indiv_id = 1; indiv_id < nb_indivs_; indiv_id++) {
+        if (prev_internal_organisms_[indiv_id]->fitness > best_fitness) {
+            idx_best = indiv_id;
+            best_fitness = prev_internal_organisms_[indiv_id]->fitness;
         }
     }
+    best_indiv = prev_internal_organisms_[idx_best];
 
-    // Write stats (non-parallel part)
+    // Stats
+    stats_best->reinit(AeTime::time());
+    stats_mean->reinit(AeTime::time());
+
+    for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+        if (dna_mutator_array_[indiv_id]->hasMutate())
+            prev_internal_organisms_[indiv_id]->compute_protein_stats();
+    }
+
     stats_best->write_best(best_indiv);
     stats_mean->write_average(prev_internal_organisms_, nb_indivs_);
 }
+
 
 /**
  * Run the evolution for a given number of generation
@@ -427,17 +414,16 @@ void ExpManager::run_a_step() {
 void ExpManager::run_evolution(int nb_gen) {
     INIT_TRACER("trace.csv", {"FirstEvaluation", "STEP"});
 
-    // Initial evaluation of organisms
     TIMESTAMP(0, {
-       for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
-           internal_organisms_[indiv_id]->locate_promoters();
-           prev_internal_organisms_[indiv_id]->evaluate(target);
-           prev_internal_organisms_[indiv_id]->compute_protein_stats();
-       }
-   });
+        for (int indiv_id = 0; indiv_id < nb_indivs_; indiv_id++) {
+            internal_organisms_[indiv_id]->locate_promoters();
+            prev_internal_organisms_[indiv_id]->evaluate(target);
+            prev_internal_organisms_[indiv_id]->compute_protein_stats();
+        }
+    });
     FLUSH_TRACES(0)
 
-    // Initialize stats objects
+    // Stats
     stats_best = new Stats(AeTime::time(), true);
     stats_mean = new Stats(AeTime::time(), false);
 
@@ -451,14 +437,11 @@ void ExpManager::run_evolution(int nb_gen) {
         printf("Generation %d : Best individual fitness %e\n", AeTime::time(), best_indiv->fitness);
         FLUSH_TRACES(gen)
 
-        // Cleaning up mutator array
-        #pragma omp parallel for
         for (int indiv_id = 0; indiv_id < nb_indivs_; ++indiv_id) {
             delete dna_mutator_array_[indiv_id];
             dna_mutator_array_[indiv_id] = nullptr;
         }
 
-        // Periodic backup
         if (AeTime::time() % backup_step_ == 0) {
             save(AeTime::time());
             cout << "Backup for generation " << AeTime::time() << " done !" << endl;
